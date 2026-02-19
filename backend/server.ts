@@ -55,12 +55,15 @@ function broadcastGroups() {
 
 // --- MIDDLEWARE DE AUTENTICAÇÃO ---
 io.use((socket: Socket, next) => {
-    const token = socket.handshake.auth.token;
-    if (!token) return next(new Error('Acesso negado. Token não fornecido.'));
+    // Pegando os dados enviados pelo React
+    const { name, email, token } = socket.handshake.auth;
+
+    if (!token) return next(new Error('Acesso negado.'));
     
-    // SIMULAÇÃO: Aqui você conectaria com a API do sistema de rastreio em Java do seu amigo
-    socket.data.userId = `motorista_${Math.floor(Math.random() * 1000)}`; 
-    socket.data.name = `Motorista ${Math.floor(Math.random() * 100)}`;
+    // Agora o userId é o email e o name é o que ele digitou
+    socket.data.userId = email || `anonimo_${socket.id}`; 
+    socket.data.name = name || `Motorista_${socket.id}`;
+    
     next();
 });
 

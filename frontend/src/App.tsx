@@ -8,48 +8,71 @@ import Logs from './Logs';
 import PttArea from './PttArea';
 
 export default function App() {
+  // --- Estados de Identificação e Sistema ---
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
   const [isSystemStarted, setIsSystemStarted] = useState(false);
   const [isPowerOn, setIsPowerOn] = useState(false);
+  
+  // --- Estados Lógicos ---
   const [mode, setMode] = useState<Mode>('local');
   const [userInfo, setUserInfo] = useState<{ name: string; userId: string } | null>(null);
   const [logs, setLogs] = useState<LogMsg[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   
-  // Modais e Layout
+  // --- Modais e Layout ---
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  // AQUI FOI A MUDANÇA: Começa como TRUE (Mutado)
-  const [isLocalMuted, setIsLocalMuted] = useState(true);
+  const [isLocalMuted, setIsLocalMuted] = useState(true); // Começa mutado por padrão
   const [showContactsModal, setShowContactsModal] = useState(false);
   const [showGroupsModal, setShowGroupsModal] = useState(false);
-  
   const [showAddGroupModal, setShowAddGroupModal] = useState(false);
   const [showAddContactModal, setShowAddContactModal] = useState(false);
 
-  // Contatos e Grupos
+  // --- Contatos e Grupos ---
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
   const [myGroups, setMyGroups] = useState<string[]>([]); 
   const [availableGroups, setAvailableGroups] = useState<GroupInfo[]>([]);
   
-  // Filas de Pedidos e Controle de Spam
+  // --- Filas de Pedidos e Controle de Spam ---
   const [groupRequests, setGroupRequests] = useState<GroupReq[]>([]);
   const [privateRequests, setPrivateRequests] = useState<PrivateReq[]>([]);
   const [sentRequests, setSentRequests] = useState<string[]>([]);
   const [sentGroupRequests, setSentGroupRequests] = useState<string[]>([]); 
 
-  // Inputs
+  // --- Inputs ---
   const [radius, setRadius] = useState('5');
   const [groupName, setGroupName] = useState('');
   const [privateTarget, setPrivateTarget] = useState('');
 
+  // --- Referências ---
   const socketRef = useRef<Socket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const isLocalMutedRef = useRef(isLocalMuted);
 
+  // --- Efeitos ---
+  useEffect(() => {
+    const savedName = localStorage.getItem('@Ratonet:name');
+    const savedEmail = localStorage.getItem('@Ratonet:email');
+    if (savedName) setUserName(savedName);
+    if (savedEmail) setUserEmail(savedEmail);
+  }, []);
+
   useEffect(() => { isLocalMutedRef.current = isLocalMuted; }, [isLocalMuted]);
   useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs]);
+
+  // --- Funções Auxiliares ---
+  const handleStartSystem = () => {
+    if (!userName.trim() || !userEmail.trim()) {
+      alert("Por favor, preencha seu Nome (QRA) e Email para iniciar.");
+      return;
+    }
+    localStorage.setItem('@Ratonet:name', userName);
+    localStorage.setItem('@Ratonet:email', userEmail);
+    setIsSystemStarted(true);
+  };
 
   const addLog = (sender: string, text: string, color = 'text-gray-300') => {
     setLogs(prev => [...prev, { id: Date.now() + Math.random(), sender, text, color, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
@@ -69,13 +92,21 @@ export default function App() {
     }
   };
 
+  // --- Core do Rádio ---
   const togglePower = async () => {
     if (!isPowerOn) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         audioStreamRef.current = stream;
         
-        const socket = io(`https://radio-px-back.onrender.com/`, { auth: { token: 'TOKEN_REACT' } });
+        // ⚠️ ATENÇÃO: COLOQUE AQUI O SEU LINK DO RENDER ⚠️
+        const socket = io(`https://radio-px-back.onrender.com/`, { 
+          auth: { 
+            token: 'TOKEN_REACT',
+            name: userName,
+            email: userEmail
+          } 
+        });
         socketRef.current = socket;
 
         socket.on('my-info', (data) => setUserInfo(data));
@@ -108,7 +139,7 @@ export default function App() {
 
         setIsPowerOn(true);
         addLog('SISTEMA', 'Rádio Online', 'text-green-400');
-      } catch (err) { alert("Permita o uso do microfone."); }
+      } catch (err) { alert("Permita o uso do microfone nas configurações do navegador."); }
     } else {
       audioStreamRef.current?.getTracks().forEach(track => track.stop());
       socketRef.current?.disconnect();
@@ -116,6 +147,7 @@ export default function App() {
     }
   };
 
+  // --- Ações ---
   const handleRequestPrivate = () => {
     const target = privateTarget.trim();
     if (!target) return;
@@ -149,6 +181,7 @@ export default function App() {
     setPrivateRequests(prev => prev.slice(1));
   };
 
+  // --- PTT Áudio ---
   const startRecord = () => {
     if (!isPowerOn || !audioStreamRef.current) return;
     if (mode === 'private' && !selectedContact) return addLog('SISTEMA', 'Selecione um contato!', 'text-red-500 font-bold');
@@ -172,15 +205,50 @@ export default function App() {
     if (mediaRecorderRef.current?.state !== "inactive") { mediaRecorderRef.current?.stop(); setIsRecording(false); }
   };
 
+  // --- Renderização da Tela Inicial (Login) ---
   if (!isSystemStarted) {
     return (
-      <div className="bg-theme-bg h-screen w-screen flex flex-col items-center justify-center p-6 text-center">
-        <h1 className="text-4xl font-bold mb-6 text-theme-orange tracking-wider">RÁDIO PX REACT</h1>
-        <button onClick={() => setIsSystemStarted(true)} className="bg-theme-orange text-black font-black py-5 px-10 rounded-full text-2xl shadow-lg transition transform hover:scale-105">LIGAR SISTEMA</button>
+      <div className="bg-theme-bg h-screen w-screen flex flex-col items-center justify-center p-6 text-center font-sans">
+        <h1 className="text-4xl font-black mb-2 text-theme-orange tracking-wider uppercase italic">Rádio PX Ratonet</h1>
+        <p className="text-gray-500 mb-8 text-sm uppercase tracking-widest font-bold">Sistema de Comunicação</p>
+
+        <div className="w-full max-w-sm space-y-4 bg-black/40 p-8 rounded-3xl border border-gray-800 shadow-2xl backdrop-blur-sm">
+          <div className="text-left">
+            <label className="text-[10px] text-theme-orange font-bold uppercase ml-2 tracking-widest">Seu Nome (QRA)</label>
+            <input 
+              type="text" 
+              placeholder="Ex: Rato Borrachudo"
+              value={userName}
+              onChange={(e) => setUserName(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 p-4 rounded-2xl text-white font-bold focus:border-theme-orange outline-none transition-all mt-1"
+            />
+          </div>
+
+          <div className="text-left mt-4">
+            <label className="text-[10px] text-theme-orange font-bold uppercase ml-2 tracking-widest">Seu E-mail (ID Único)</label>
+            <input 
+              type="email" 
+              placeholder="rato@ratonet.com.br"
+              value={userEmail}
+              onChange={(e) => setUserEmail(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 p-4 rounded-2xl text-white font-bold focus:border-theme-orange outline-none transition-all mt-1"
+            />
+          </div>
+
+          <button 
+            onClick={handleStartSystem} 
+            className="w-full bg-theme-orange text-black font-black py-5 rounded-2xl text-xl shadow-lg transition transform hover:scale-105 active:scale-95 uppercase mt-6"
+          >
+            Ligar Sistema
+          </button>
+          
+          <p className="text-[10px] text-gray-500 uppercase font-bold mt-4 pt-4 border-t border-gray-800">Suas informações ficam salvas neste dispositivo</p>
+        </div>
       </div>
     );
   }
 
+  // --- Renderização do Painel do Rádio ---
   return (
     <div className="flex h-screen w-screen bg-theme-bg text-white overflow-hidden font-sans font-medium">
       
