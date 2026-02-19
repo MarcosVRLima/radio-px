@@ -75,7 +75,7 @@ export default function App() {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         audioStreamRef.current = stream;
         
-        const socket = io(`http://${window.location.hostname}:3000`, { auth: { token: 'TOKEN_REACT' } });
+        const socket = io(`https://radio-px-back.onrender.com/`, { auth: { token: 'TOKEN_REACT' } });
         socketRef.current = socket;
 
         socket.on('my-info', (data) => setUserInfo(data));
